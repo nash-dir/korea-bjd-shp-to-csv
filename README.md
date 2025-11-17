@@ -48,11 +48,12 @@ python bjd_geometry_to_csv.py
 | 컬럼명 | 설명 | 예시 |
 | :--- | :--- | :--- |
 | `legal_dong_code` | 법정동코드 (10자리 표준) | `4159025321` |
-| `legal_dong_tip` | 법정동명 마지막 단위 | `상면` |
+| `legal_dong_tip` | 법정동명 마지막 단위 | `상리` |
 | `COL_ADM_SECT_CD` | 원천시군구코드 | `41590` |
+| `SGG_OID` | 원천도형_ID | `1410` |
 | `center_latitude` | 중심점 위도 (EPSG:4326) | `37.8123...` |
 | `center_longitude` | 중심점 경도 (EPSG:4326) | `127.456...` |
-| `radius_km` | **외접원 반경 (검색 보정용)** | `2.45` (km) |
+| `radius_km` | **외접원 반경 (중심지 거리 보정용)** | `2.45` (km) |
 | `filename` | 원천 파일명 | `LSMD_...shp` |
 
 ## bjd_251117_2212_result.csv
