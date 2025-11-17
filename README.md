@@ -1,4 +1,3 @@
-"""
 # korea-bjd-shp-to-csv
 
 **대한민국 법정동 쉐이프파일(.shp) 전처리 및 CSV 변환 도구**
