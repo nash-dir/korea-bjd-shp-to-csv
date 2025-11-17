@@ -43,12 +43,12 @@ from datetime import datetime  # 파일명 생성을 위한 시간 라이브러�
 # [설정 영역]
 # ===========================================================
 
-# [수정됨] 1. 경로 설정
+# 1. 경로 설정
 BASE_DIR = os.getcwd()  # 현재 스크립트가 실행되는 디렉토리
 INPUT_DIR = os.path.join(BASE_DIR, 'input')    # 쉐이프파일이 위치한 폴더
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')  # 결과물이 저장될 폴더
 
-# [수정됨] 2. 쉐이프파일 인코딩 설정
+# 2. 쉐이프파일 인코딩 설정
 SHP_ENCODING = 'euc-kr'
 
 # 3. 컬럼명 매핑 후보군
@@ -242,7 +242,7 @@ def process_shapefiles():
             df_result['radius_km'] = radius_km.round(3) # km 단위 (소수점 3째자리)
             df_result['filename'] = file_name # 원본 파일명 (데이터 리니지)
             
-            # 5. 개별 임시 CSV 저장 (디버깅용)
+            # 5. 개별 임시 CSV 저장
             df_result.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
             generated_csvs.append(output_csv_path) # 병합을 위해 경로 저장
             
