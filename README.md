@@ -3,7 +3,7 @@
 이 저장소는 대한민국 법정동 쉐이프파일(.shp)을 처리하고, 이를 법정동 마스터 코드와 병합하는 두 가지 파이썬 유틸리티를 제공합니다.
 
 * 가.  **`bjd_geometry_to_csv.py`**: 쉐이프파일에서 중심좌표, 반경(radius) 등을 추출합니다.
-* 나.  **`join_bjd_coords_with_full_address.py`**: 법정동 마스터 파일에 위 좌표를 병합하고, 전체 주소(`full_address`)를 생성합니다.
+* 나.  **`bjd_csv_to_fulladdress.py`**: 법정동 마스터 파일에 위 좌표를 병합하고, 전체 주소(`full_address`)를 생성합니다.
 
 ## 데이터 출처
 
