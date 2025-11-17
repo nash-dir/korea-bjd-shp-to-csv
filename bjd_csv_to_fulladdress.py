@@ -29,8 +29,8 @@ import re
 # 1. 기본(좌측)이 될 법정동 코드 전체 파일
 BASE_FILE = 'LSCT_LAWDCD.csv'
 
-# 2. Join(우측)할 좌표 데이터 파일 (사용자가 업로드한 파일명 기준)
-DATA_FILE = 'bjd_251117_2212_result.csv'
+# 2. Join(우측)할 좌표 데이터 파일 (실행 전 지정 필요)
+DATA_FILE = 'bjd_yymmdd_HHMM_result.csv'
 
 # 3. 저장될 결과 파일명 (확장자 제외)
 OUTPUT_NAME = 'LSCT_LAWDCD_coords'

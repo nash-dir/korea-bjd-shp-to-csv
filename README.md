@@ -97,7 +97,7 @@ python bjd_geometry_to_csv.py
 
 ### 사용법
 
-이 스크립트(join_bjd_coords_with_full_address.py)와 아래 파일을 동일한 폴더에 넣고 스크립트를 실행합니다(파일명은 스크립트 내 DATA_FILE 변수에서 수정 가능).
+이 스크립트(bjd_csv_to_fulladdress.py)와 아래 파일을 동일한 폴더에 넣고 스크립트를 실행합니다. 파일명은 스크립트 ln.33 DATA_FILE 변수에서 수정 가능합니다.
 
 *   **LSCT_LAWDCD.csv** (법정동 코드 마스터 원본)
 *   **bjd_mmyydd_HHMM_result.csv** 
