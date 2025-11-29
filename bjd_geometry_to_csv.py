@@ -218,11 +218,12 @@ def process_shapefiles():
             # (1) 좌표계 변환 (EPSG:5179 - 미터 단위)
             gdf_5179 = gdf.to_crs(epsg=5179)
             
-            # (2) 외접 사각형 대각선 절반 길이 (radius_km) 계산
-            bounds = gdf_5179.geometry.bounds
-            diagonal = ((bounds['maxx'] - bounds['minx'])**2 + 
-                        (bounds['maxy'] - bounds['miny'])**2)**0.5
-            radius_km = diagonal / 2000 # 미터(m)를 킬로미터(km)로 변환, 반으로 나누기
+            # (2) 외접원(Minimum Bounding Circle) 반지름 (radius_km) 계산
+            # minimum_bounding_circle()은 외접원을 폴리곤 형태로 반환합니다.
+            # 따라서 원의 면적 공식(A = πr²)을 이용해 반지름을 역산합니다: r = sqrt(A / π)
+            mbc_geometry = gdf_5179.geometry.minimum_bounding_circle()
+            radius_m = (mbc_geometry.area / 3.141592653589793) ** 0.5
+            radius_km = radius_m / 1000  # 미터(m)를 킬로미터(km)로 변환
             
             # (3) 중심점(Centroid) 계산 및 변환 (EPSG:4326 - 위/경도)
             centroids = gdf_5179.geometry.centroid.to_crs(epsg=4326)

@@ -1,3 +1,6 @@
+# Notice
+본 데이터는 2025. 11. 17.자 데이터에서 'radius_km'만 '지오메트리 외접원 반지름'으로 대체한 것입니다.
+
 # Exception Labels
 
 | Code | Label | Description |

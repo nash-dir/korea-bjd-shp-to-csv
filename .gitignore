@@ -1,6 +1,8 @@
 .DS_Store
 Thumbs.db
 .venv/
+.env
 __pycache__/
 /input/
 /output/
+/reservoir/
