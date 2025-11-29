@@ -74,7 +74,7 @@ python bjd_geometry_to_csv.py
 ## 나. bjd_csv_to_fulladdress
 **대한민국 법정동 전체 리스트 매핑 스크립트**
 
-이 저장소의 'bjd_geometry_to_csv.py'로 생성된 좌표/반경 데이터 ('bjd_mmddyy_HHMM_result.csv')를, 행정안전부 등에서 제공하는 법정동 코드 마스터 파일 (LSCT_LAWDCD.csv)에 병합(Join)하기 위한 유틸리티입니다.
+이 저장소의 'bjd_geometry_to_csv.py'로 생성된 좌표/반경 데이터 ('bjd_yymmdd_HHMM_result.csv')를, 행정안전부 등에서 제공하는 법정동 코드 마스터 파일 (LSCT_LAWDCD.csv)에 병합(Join)하기 위한 유틸리티입니다.
 
 ### 주요 기능
 
@@ -83,8 +83,8 @@ python bjd_geometry_to_csv.py
     * 주소 중간에 NaN 값이 있어도 안전하게 처리하며, "서울특별시  종로구"처럼 중간에 공백이 2칸 이상 생기거나 " 서울특별시 "처럼 앞뒤에 공백이 생기는 문제를 정규표현식으로 자동 정제합니다.
     * 생성된 full_address 열은 RI_NM 열 바로 뒤에 삽입됩니다.
 2.  **좌표 데이터 병합 (Left Join):**
-    * 법정동 마스터 파일(LSCT_LAWDCD.csv)을 기준으로, bjd_mmddyy_HHMM_result.csv의 좌표 정보를 left join 합니다.
-    * **매칭 키:** LSCT_LAWDCD.csv의 **LAWD_CD** ↔ bjd_mmddyy_HHMM_result.csv의 **legal_dong_code**
+    * 법정동 마스터 파일(LSCT_LAWDCD.csv)을 기준으로, bjd_yymmdd_HHMM_result.csv의 좌표 정보를 left join 합니다.
+    * **매칭 키:** LSCT_LAWDCD.csv의 **LAWD_CD** ↔ bjd_yymmdd_HHMM_result.csv의 **legal_dong_code**
     * **중복 처리:** bjd_..._result.csv에 동일한 legal_dong_code가 여러 개 있을 경우, 맨 처음 발견된 1개의 행만 사용합니다.
 3.  **파일 통합:** 
     * 결과물은 LSCT_LAWDCD_coords.csv로 저장됩니다.
