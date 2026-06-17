@@ -1,0 +1,28 @@
+[project]
+name = "korea-bjd-shp-to-csv"
+version = "0.1.0"
+description = "Convert Korean legal-dong (법정동) shapefiles to clean CSV, merge with the master code table, and verify centroids via reverse geocoding."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "geopandas",
+    "pandas",
+    "tqdm",
+    "requests",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I"]  # import sorting
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -20,11 +20,12 @@
 ================================================================================
 """
 
-import pandas as pd
+import argparse
 import os
-import re
 
-# --- 설정 영역 ---
+import pandas as pd
+
+# --- 설정 영역 (CLI 기본값) ---
 
 # 1. 기본(좌측)이 될 법정동 코드 전체 파일
 BASE_FILE = 'LSCT_LAWDCD.csv'
@@ -75,7 +76,7 @@ def create_full_address(df_base, components):
     """
     [v2] df_base에서 주소 구성요소 컬럼을 조합하여 'full_address'를 생성하고 삽입합니다.
     """
-    print(f"  > 'full_address' 생성 작업 시작...")
+    print("  > 'full_address' 생성 작업 시작...")
     
     # 1. df_base에 존재하는 주소 구성요소 컬럼만 필터링
     existing_components = [col for col in components if col in df_base.columns]
@@ -119,46 +120,46 @@ def create_full_address(df_base, components):
     return df_base
 
 
-def main():
+def main(base_file=BASE_FILE, data_file=DATA_FILE, output_name=OUTPUT_NAME):
     """
     메인 실행 함수
     """
     print("[1/5] 스크립트 실행 시작...")
 
     # --- 1. 필수 파일 존재 여부 확인 ---
-    if not os.path.exists(BASE_FILE):
-        print(f"[오류] 기본 파일 '{BASE_FILE}'을(를) 찾을 수 없습니다.")
+    if not os.path.exists(base_file):
+        print(f"[오류] 기본 파일 '{base_file}'을(를) 찾을 수 없습니다.")
         print("스크립트와 같은 폴더에 파일이 있는지 확인해주세요.")
         return
 
-    if not os.path.exists(DATA_FILE):
-        print(f"[오류] 좌표 데이터 파일 '{DATA_FILE}'을(를) 찾을 수 없습니다.")
+    if not os.path.exists(data_file):
+        print(f"[오류] 좌표 데이터 파일 '{data_file}'을(를) 찾을 수 없습니다.")
         print("스크립트와 같은 폴더에 파일이 있는지 확인해주세요.")
         return
 
     try:
         # --- 2. 데이터 로드 (BASE_FILE) ---
-        print(f"[2/5] '{BASE_FILE}' 로드 중...")
-        
+        print(f"[2/5] '{base_file}' 로드 중...")
+
         # 법정동 코드는 '0'으로 시작할 수 있으므로 반드시 'str'로 읽어야 함
         try:
             # 기본 'utf-8-sig'로 시도
-            df_base = pd.read_csv(BASE_FILE, dtype={'LAWD_CD': str}, encoding='utf-8-sig')
+            df_base = pd.read_csv(base_file, dtype={'LAWD_CD': str}, encoding='utf-8-sig')
         except UnicodeDecodeError:
             # 실패 시 'euc-kr'로 재시도 (공공데이터는 euc-kr이 많음)
-            print(f"  > (정보) utf-8-sig 읽기 실패. 'euc-kr' 인코딩으로 재시도합니다.")
-            df_base = pd.read_csv(BASE_FILE, dtype={'LAWD_CD': str}, encoding='euc-kr')
+            print("  > (정보) utf-8-sig 읽기 실패. 'euc-kr' 인코딩으로 재시도합니다.")
+            df_base = pd.read_csv(base_file, dtype={'LAWD_CD': str}, encoding='euc-kr')
 
-        print(f"  > '{BASE_FILE}' 로드 완료. (총 {len(df_base)}건)")
+        print(f"  > '{base_file}' 로드 완료. (총 {len(df_base)}건)")
 
         # --- 2-1. [v2] full_address 생성 로직 호출 ---
         df_base = create_full_address(df_base, ADDRESS_COMPONENTS)
 
         # --- 2-2. 데이터 로드 (DATA_FILE) ---
-        print(f"[2/5] '{DATA_FILE}' 로드 중...")
+        print(f"[2/5] '{data_file}' 로드 중...")
         # 좌표 파일은 'bjd_geometry_to_csv.py'에서 'utf-8-sig'로 저장했으므로 인코딩 고정
-        df_data = pd.read_csv(DATA_FILE, 
-                              dtype={'legal_dong_code': str}, 
+        df_data = pd.read_csv(data_file,
+                              dtype={'legal_dong_code': str},
                               encoding='utf-8-sig')
         
         # --- 3. 좌표 데이터 준비 (컬럼 선택 및 중복 제거) ---
@@ -167,7 +168,7 @@ def main():
         # 3a. 요청된 컬럼이 모두 있는지 확인
         missing_cols = [col for col in COLUMNS_TO_JOIN if col not in df_data.columns]
         if missing_cols:
-            print(f"[오류] '{DATA_FILE}'에 다음 필수 컬럼이 없습니다: {missing_cols}")
+            print(f"[오류] '{data_file}'에 다음 필수 컬럼이 없습니다: {missing_cols}")
             return
 
         # 3b. 필요한 컬럼만 선택
@@ -197,14 +198,14 @@ def main():
             df_merged = df_merged.drop(columns=['legal_dong_code'])
 
         # --- 5. 결과 저장 ---
-        output_file = get_unique_filename(OUTPUT_NAME, '.csv')
+        output_file = get_unique_filename(output_name, '.csv')
         print(f"[5/5] 결과 저장 중: '{output_file}'")
 
         # Excel에서 바로 열 수 있도록 'utf-8-sig'로 저장
         df_merged.to_csv(output_file, index=False, encoding='utf-8-sig')
 
         print("\n==================================================")
-        print(f"[작업 완료]")
+        print("[작업 완료]")
         print(f"'{output_file}' 파일에 총 {len(df_merged)}건의 데이터가 저장되었습니다.")
         
         # Join 성공/실패 요약
@@ -220,6 +221,31 @@ def main():
         import traceback
         traceback.print_exc()
 
+def build_parser():
+    """CLI 인자 파서. 기본값은 기존 인파일 설정 상수와 동일합니다(기존 동작 보존)."""
+    parser = argparse.ArgumentParser(
+        description="법정동 코드 마스터(LSCT_LAWDCD.csv)에 좌표 데이터를 병합하고 full_address를 생성합니다."
+    )
+    parser.add_argument(
+        "-b", "--base-file", default=BASE_FILE,
+        help="법정동 코드 전체(좌측) 파일 (기본값: LSCT_LAWDCD.csv)",
+    )
+    parser.add_argument(
+        "-d", "--data-file", default=DATA_FILE,
+        help="병합할 좌표(우측) 데이터 파일 (기본값: bjd_yymmdd_HHMM_result.csv)",
+    )
+    parser.add_argument(
+        "-o", "--output-name", default=OUTPUT_NAME,
+        help="결과 파일명(확장자 제외). 중복 시 -1, -2... 접미사 자동 부여 (기본값: LSCT_LAWDCD_coords)",
+    )
+    return parser
+
+
 # 스크립트 직접 실행 시 main() 함수 호출
 if __name__ == "__main__":
-    main()
+    args = build_parser().parse_args()
+    main(
+        base_file=args.base_file,
+        data_file=args.data_file,
+        output_name=args.output_name,
+    )
