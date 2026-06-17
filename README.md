@@ -37,7 +37,7 @@ GeoPandas를 이용해 브이월드 등에서 제공하는 법정동(읍면동/�
 
 #### 1. 환경 설정
 ```bash
-pip install geopandas pandas tqdm
+pip install -r requirements.txt
 ```
 
 #### 2. 디렉토리 구조 및 실행
@@ -51,7 +51,11 @@ korea-bjd-shp-to-csv/
 ```
 
 ```bash
+# 기본값(input/ → output/, euc-kr)으로 실행
 python bjd_geometry_to_csv.py
+
+# 입력/출력 폴더나 인코딩을 바꾸려면 CLI 옵션을 사용합니다
+python bjd_geometry_to_csv.py --input-dir ./input --output-dir ./output --encoding euc-kr
 ```
 
 ### 결과물 명세
@@ -98,13 +102,17 @@ python bjd_geometry_to_csv.py
 
 ### 사용법
 
-이 스크립트(bjd_csv_to_fulladdress.py)와 아래 파일을 동일한 폴더에 넣고 스크립트를 실행합니다. 파일명은 스크립트 ln.33 DATA_FILE 변수에서 수정 가능합니다.
+이 스크립트(bjd_csv_to_fulladdress.py)와 아래 파일을 동일한 폴더에 넣고 스크립트를 실행합니다.
 
 *   **LSCT_LAWDCD.csv** (법정동 코드 마스터 원본)
 *   **bjd_yymmdd_HHMM_result.csv** 
 
 ```bash
+# 기본 파일명으로 실행
 python bjd_csv_to_fulladdress.py
+
+# 파일명을 직접 지정 (--data-file 등은 -h 로 전체 옵션 확인)
+python bjd_csv_to_fulladdress.py --base-file LSCT_LAWDCD.csv --data-file bjd_251117_2212_result.csv
 ```
 
 ### 결과물 명세 
@@ -159,10 +167,14 @@ API_KEY={브이월드_인증키_입력}
 ```
 
 #### 2. 실행
-검증할 CSV 파일명은 스크립트 상단의 INPUT_CSV 변수에서 수정할 수 있습니다.
+검증할 CSV 파일명 등은 CLI 옵션으로 지정합니다(전체 옵션은 `-h` 참고).
 
 ```bash
+# 기본 파일명으로 실행
 python bjd_csv_API_verification.py
+
+# 입력/출력 CSV를 직접 지정
+python bjd_csv_API_verification.py --input-csv LSCT_LAWDCD_coords_251117_revised.csv --output-csv result.csv
 ```
 
 ### 결과물 명세
@@ -200,5 +212,18 @@ python bjd_csv_API_verification.py
 *   **법정동 코드, 전체 주소, 중심좌표 등 최종 데이터만 필요하신 분은 이것만 다운받으셔도 됩니다.**
 
 
+## 개발 / 테스트
+
+순수 함수(컬럼 매핑, 코드 패딩, 주소 정제, 검증 라벨링) 위주의 단위 테스트가 `tests/`에 있습니다.
+무거운 의존성(geopandas 등)은 실행 함수 내부에서 lazy import 되므로, 린트/테스트에는 `pandas`만 있으면 됩니다.
+
+```bash
+pip install pandas pytest ruff
+ruff check .
+pytest
+```
+
+CI(`.github/workflows/ci.yml`)에서 push/PR 시 `ruff`와 `pytest`를 자동 실행합니다.
+
 ## 라이선스
-MIT License
+이 프로젝트는 [MIT License](LICENSE)를 따릅니다.

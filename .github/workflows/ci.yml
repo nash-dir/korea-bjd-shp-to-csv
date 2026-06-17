@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 실행 전용 의존성(geopandas 등)은 함수 내부에서 lazy import 되므로,
+      # 린트/테스트에는 pandas + 도구 체인만 있으면 충분합니다.
+      - name: Install dev tooling
+        run: python -m pip install --upgrade pip pandas pytest ruff
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Pytest
+        run: pytest -q

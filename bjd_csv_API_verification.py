@@ -1,14 +1,15 @@
-import pandas as pd
-import requests
-import time
+import argparse
 import os
-import sys
+import time
 from datetime import datetime
-from tqdm import tqdm
-from dotenv import load_dotenv
+
+import pandas as pd
+
+# requests, tqdm, dotenv 등 실행 전용 의존성은 실제 실행 함수 내부에서 지연(lazy) import 합니다.
+# 덕분에 순수 함수(verify_address)는 pandas만으로 import/테스트할 수 있습니다.
 
 # ===========================================================
-# [설정 영역]
+# [설정 영역] (CLI 기본값)
 # ===========================================================
 INPUT_CSV = "LSCT_LAWDCD_coords_251117_revised.csv"   # 원본 파일
 OUTPUT_CSV = "LSCT_LAWDCD_with_verified_address.csv"  # 결과 CSV 파일
@@ -20,6 +21,8 @@ def get_vworld_address(lat, lon, api_key):
     """
     VWorld API를 통해 좌표 -> 주소(도로명/지번) 변환
     """
+    import requests
+
     if pd.isna(lat) or pd.isna(lon):
         return None
 
@@ -74,8 +77,10 @@ def verify_address(row, api_addr):
     ri_nm = str(row.get('RI_NM', '')).strip()
     umd_nm = str(row.get('UMD_NM', '')).strip()
     
-    if ri_nm.lower() == 'nan': ri_nm = ''
-    if umd_nm.lower() == 'nan': umd_nm = ''
+    if ri_nm.lower() == 'nan':
+        ri_nm = ''
+    if umd_nm.lower() == 'nan':
+        umd_nm = ''
 
     # 매칭 로직
     if ri_nm:
@@ -85,21 +90,26 @@ def verify_address(row, api_addr):
     
     return 0
 
-def main():
+def main(input_csv=INPUT_CSV, output_csv=OUTPUT_CSV, batch_size=BATCH_SIZE,
+         request_delay=REQUEST_DELAY):
+    # 실행 전용 의존성 lazy import
+    from dotenv import load_dotenv
+    from tqdm import tqdm
+
     # 1. 환경 변수 로드
     load_dotenv()
     vworld_key = os.getenv("API_KEY")
-    
+
     if not vworld_key:
         print("[오류] 'API_KEY' 환경 변수가 없습니다. .env 파일을 확인하세요.")
         return
 
     # 2. 데이터 로드
-    if not os.path.exists(INPUT_CSV):
-        print(f"[오류] 입력 파일이 존재하지 않습니다: {INPUT_CSV}")
+    if not os.path.exists(input_csv):
+        print(f"[오류] 입력 파일이 존재하지 않습니다: {input_csv}")
         return
 
-    df = pd.read_csv(INPUT_CSV, dtype={'legal_dong_code': str})
+    df = pd.read_csv(input_csv, dtype={'legal_dong_code': str})
     
     # 3. 통계 카운터 초기화
     cnt_total = len(df)      # 총 레코드 수
@@ -111,7 +121,7 @@ def main():
 
     # 4. 결과 파일 초기화
     output_columns = df.columns.tolist() + ['center_address', 'verified']
-    pd.DataFrame(columns=output_columns).to_csv(OUTPUT_CSV, index=False, encoding='utf-8-sig')
+    pd.DataFrame(columns=output_columns).to_csv(output_csv, index=False, encoding='utf-8-sig')
 
     buffer = []
 
@@ -134,7 +144,7 @@ def main():
             elif is_verified == 1:
                 cnt_matched += 1
             
-            time.sleep(REQUEST_DELAY)
+            time.sleep(request_delay)
         
         # (B) 좌표 결측 시
         else:
@@ -148,15 +158,15 @@ def main():
         buffer.append(row_dict)
 
         # (C) 배치 저장
-        if len(buffer) >= BATCH_SIZE:
+        if len(buffer) >= batch_size:
             batch_df = pd.DataFrame(buffer)
-            batch_df.to_csv(OUTPUT_CSV, index=False, header=False, mode='a', encoding='utf-8-sig')
+            batch_df.to_csv(output_csv, index=False, header=False, mode='a', encoding='utf-8-sig')
             buffer = []
 
     # 6. 잔여 데이터 저장
     if buffer:
         batch_df = pd.DataFrame(buffer)
-        batch_df.to_csv(OUTPUT_CSV, index=False, header=False, mode='a', encoding='utf-8-sig')
+        batch_df.to_csv(output_csv, index=False, header=False, mode='a', encoding='utf-8-sig')
 
     # 7. 최종 리포트 생성 및 저장
     # (요청하신 포맷: 총 0건 레코드 중 0건 요청, 0건 오류, 0건 중 0건 일치 확인)
@@ -174,10 +184,40 @@ def main():
     with open(report_filename, "w", encoding="utf-8") as f:
         f.write(report_text)
 
-    print(f"\n[완료] 작업 종료.")
-    print(f" - 결과 데이터: {OUTPUT_CSV}")
+    print("\n[완료] 작업 종료.")
+    print(f" - 결과 데이터: {output_csv}")
     print(f" - 결과 리포트: {report_filename}")
     print(f" - 내용: {report_text}")
 
+def build_parser():
+    """CLI 인자 파서. 기본값은 기존 인파일 설정 상수와 동일합니다(기존 동작 보존)."""
+    parser = argparse.ArgumentParser(
+        description="VWorld reverse-geocoding API로 법정동 CSV의 중심좌표를 검증합니다."
+    )
+    parser.add_argument(
+        "-i", "--input-csv", default=INPUT_CSV,
+        help="검증할 원본 CSV (기본값: LSCT_LAWDCD_coords_251117_revised.csv)",
+    )
+    parser.add_argument(
+        "-o", "--output-csv", default=OUTPUT_CSV,
+        help="결과 CSV (기본값: LSCT_LAWDCD_with_verified_address.csv)",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=BATCH_SIZE,
+        help="중간 저장 단위 (기본값: 100)",
+    )
+    parser.add_argument(
+        "--request-delay", type=float, default=REQUEST_DELAY,
+        help="API 요청 간격(초) (기본값: 0.05)",
+    )
+    return parser
+
+
 if __name__ == "__main__":
-    main()
+    args = build_parser().parse_args()
+    main(
+        input_csv=args.input_csv,
+        output_csv=args.output_csv,
+        batch_size=args.batch_size,
+        request_delay=args.request_delay,
+    )

@@ -31,13 +31,16 @@ pip install geopandas pandas tqdm
      |- (최종) bjd_251117_2141_error.csv
 ================================================================================
 """
-import geopandas as gpd
-import pandas as pd
-import os
+import argparse
 import glob
+import os
 import re  # 정규표현식(Regex) 라이브러리
-from tqdm import tqdm  # 진행률 표시 라이브러리
 from datetime import datetime  # 파일명 생성을 위한 시간 라이브러리
+
+import pandas as pd
+
+# geopandas, tqdm 등 실행 전용 의존성은 실제 실행 함수 내부에서 지연(lazy) import 합니다.
+# 덕분에 순수 함수(find_column, pad_code 등)는 무거운 의존성 없이도 import/테스트할 수 있습니다.
 
 # ===========================================================
 # [설정 영역]
@@ -99,19 +102,46 @@ def find_column(columns, candidates):
     return None  # 후보군에 해당하는 컬럼이 하나도 없으면 None 반환
 
 
+# --- 코드 검증/패딩용 정규표현식 (모듈 전역에서 1회 컴파일) ---
+# 한글이 1글자라도 포함되어 있는지 (자음/모음 포함)
+_HANGUL_PATTERN = re.compile(r'[ㄱ-ㅎㅏ-ㅣ가-힣]')
+# '8자리 또는 10자리'의 숫자로만 구성되어 있는지
+_CODE_PATTERN_8_10 = re.compile(r'^\d{8}$|^\d{10}$')
+# '정확히 8자리' 숫자인지 (00 패딩 대상)
+_CODE_PATTERN_8 = re.compile(r'^\d{8}$')
+
+
+def validate_code_and_tip(code, tip):
+    """
+    법정동코드와 법정동명(tip)을 검증합니다. (순수 함수)
+
+    Returns:
+        오류 사유 문자열(str). 정상이면 None.
+    """
+    if not _CODE_PATTERN_8_10.match(code):
+        return '법정동코드 형식이 8자리 또는 10자리 숫자가 아님'
+    if not _HANGUL_PATTERN.search(tip):
+        return '법정동명(tip)에 한글이 포함되지 않음'
+    return None
+
+
+def pad_code(code):
+    """
+    8자리(읍면동) 코드는 뒤에 '00'을 붙여 10자리 표준 코드로 변환합니다. (순수 함수)
+    8자리가 아닌 코드(이미 10자리 등)는 그대로 반환합니다.
+    """
+    if _CODE_PATTERN_8.match(code):
+        return code + '00'
+    return code
+
+
 def post_process_and_save(final_df, output_dir, final_filename, error_filename):
     """
     [후처리] 최종 병합된 데이터프레임을 검증하고, 정상/오류 파일로 분리 저장합니다.
     """
-    print("\n[3단계] 최종 데이터 후처리 및 검증 시작...")
+    from tqdm import tqdm  # 진행률 표시 (실행 전용 의존성)
 
-    # --- 1. 검증용 정규표현식(Regex) 준비 ---
-    # 한글이 1글자라도 포함되어 있는지 (자음/모음 포함)
-    hangul_pattern = re.compile(r'[ㄱ-ㅎㅏ-ㅣ가-힣]')
-    # '8자리 또는 10자리'의 숫자로만 구성되어 있는지
-    code_pattern_8_10 = re.compile(r'^\d{8}$|^\d{10}$')
-    # '정확히 8자리' 숫자인지 (00 패딩 대상)
-    code_pattern_8 = re.compile(r'^\d{8}$')
+    print("\n[3단계] 최종 데이터 후처리 및 검증 시작...")
 
     # --- 2. 안정성을 위해 타입 변환 및 공백 제거 ---
     final_df['legal_dong_code'] = final_df['legal_dong_code'].astype(str).str.strip()
@@ -124,26 +154,18 @@ def post_process_and_save(final_df, output_dir, final_filename, error_filename):
     for index, row in tqdm(final_df.iterrows(), total=len(final_df), desc="데이터 검증"):
         code = row['legal_dong_code']
         tip = row['legal_dong_tip']
-        is_error = False
 
-        # [검증 1] 법정동코드 형식 (8자리 또는 10자리 숫자)
-        if not code_pattern_8_10.match(code):
-            row['error_reason'] = '법정동코드 형식이 8자리 또는 10자리 숫자가 아님'
-            is_error = True
-
-        # [검증 2] 법정동명(tip) 한글 포함 여부
-        if not is_error and not hangul_pattern.search(tip):
-            row['error_reason'] = '법정동명(tip)에 한글이 포함되지 않음'
-            is_error = True
+        # [검증] 법정동코드 형식(8/10자리) 및 법정동명(tip) 한글 포함 여부
+        error_reason = validate_code_and_tip(code, tip)
 
         # --- 4. 분리 및 8자리 코드 패딩 ---
-        if is_error:
+        if error_reason is not None:
+            row['error_reason'] = error_reason
             error_rows.append(row)
         else:
             clean_indices.append(index)
             # [정상 처리] 8자리 코드(읍면동)일 경우, 뒤에 '00'을 추가하여 10자리로 표준화
-            if code_pattern_8.match(code):
-                final_df.at[index, 'legal_dong_code'] = code + '00'
+            final_df.at[index, 'legal_dong_code'] = pad_code(code)
 
     # --- 5. 최종 데이터프레임 분리 및 저장 ---
     clean_df = final_df.loc[clean_indices].copy()
@@ -165,25 +187,29 @@ def post_process_and_save(final_df, output_dir, final_filename, error_filename):
         print("[정보] 오류 데이터가 발견되지 않았습니다.")
 
 
-def process_shapefiles():
+def process_shapefiles(input_dir=INPUT_DIR, output_dir=OUTPUT_DIR, encoding=SHP_ENCODING):
     """
     메인 실행 함수. input 폴더의 shp 파일을 읽어 처리하고 output에 저장합니다.
     """
+    # geopandas, tqdm은 무거운/실행 전용 의존성이므로 실제 실행 시점에만 import 합니다.
+    import geopandas as gpd
+    from tqdm import tqdm
+
     # --- 0. 준비 단계 ---
-    
+
     # output 폴더가 없을 경우 생성
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
+    os.makedirs(output_dir, exist_ok=True)
+
     # 동적 파일명 생성을 위한 타임스탬프 yymmdd_HHMM
     TIMESTAMP = datetime.now().strftime('%y%m%d_%H%M')
     FINAL_FILENAME_DYN = f"bjd_{TIMESTAMP}_result.csv"
     ERROR_FILENAME_DYN = f"bjd_{TIMESTAMP}_error.csv"
 
     # 'input' 폴더에서 .shp 파일 목록 가져오기
-    shp_list = glob.glob(os.path.join(INPUT_DIR, "*.shp"))
-    
+    shp_list = glob.glob(os.path.join(input_dir, "*.shp"))
+
     if not shp_list:
-        print(f"[경고] 'input' 폴더에 .shp 파일이 없습니다: {INPUT_DIR}")
+        print(f"[경고] 'input' 폴더에 .shp 파일이 없습니다: {input_dir}")
         return
 
     print(f"총 {len(shp_list)}개의 SHP 파일을 발견했습니다.")
@@ -194,15 +220,15 @@ def process_shapefiles():
     # ==================================================
     # [1단계] 개별 쉐이프파일 처리 및 임시 CSV 생성
     # ==================================================
-    print(f"[1단계] 개별 파일 처리 및 지오메트리 연산 시작...")
+    print("[1단계] 개별 파일 처리 및 지오메트리 연산 시작...")
     for file_path in tqdm(shp_list, desc="개별 파일 처리"):
         file_name = os.path.basename(file_path)
         # 임시 파일은 'output' 폴더에 저장
-        output_csv_path = os.path.join(OUTPUT_DIR, f"temp_{os.path.splitext(file_name)[0]}.csv")
-        
+        output_csv_path = os.path.join(output_dir, f"temp_{os.path.splitext(file_name)[0]}.csv")
+
         try:
-            # 1. 파일 로드 (요청하신 'euc-kr' 인코딩 사용)
-            gdf = gpd.read_file(file_path, encoding=SHP_ENCODING)
+            # 1. 파일 로드 (기본 'euc-kr' 인코딩 사용)
+            gdf = gpd.read_file(file_path, encoding=encoding)
             
             # 2. 키 매핑 (표준화)
             code_col = find_column(gdf.columns, CODE_CANDIDATES)
@@ -264,8 +290,8 @@ def process_shapefiles():
             final_df = pd.concat(df_list, ignore_index=True)
             
             # [3단계] 후처리 함수 호출
-            # 동적 파일명과 'OUTPUT_DIR' 경로 전달
-            post_process_and_save(final_df, OUTPUT_DIR, FINAL_FILENAME_DYN, ERROR_FILENAME_DYN)
+            # 동적 파일명과 출력 경로 전달
+            post_process_and_save(final_df, output_dir, FINAL_FILENAME_DYN, ERROR_FILENAME_DYN)
             
             # 4. 임시 파일 삭제
             print("\n[4단계] 임시 파일 삭제 중...")
@@ -281,5 +307,34 @@ def process_shapefiles():
         print("처리된 CSV 파일이 없어 병합을 건너뜁니다.")
 
 
+def build_parser():
+    """CLI 인자 파서. 기본값은 기존 인파일 설정 상수와 동일합니다(기존 동작 보존)."""
+    parser = argparse.ArgumentParser(
+        description="대한민국 법정동 쉐이프파일(.shp)을 읽어 중심좌표/외접원 반지름을 추출, CSV로 변환합니다."
+    )
+    parser.add_argument(
+        "-i", "--input-dir", default=INPUT_DIR,
+        help="입력 .shp 파일들이 위치한 폴더 (기본값: ./input)",
+    )
+    parser.add_argument(
+        "-o", "--output-dir", default=OUTPUT_DIR,
+        help="결과물이 저장될 폴더 (기본값: ./output)",
+    )
+    parser.add_argument(
+        "-e", "--encoding", default=SHP_ENCODING,
+        help="쉐이프파일 인코딩 (기본값: euc-kr)",
+    )
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    process_shapefiles(
+        input_dir=args.input_dir,
+        output_dir=args.output_dir,
+        encoding=args.encoding,
+    )
+
+
 if __name__ == "__main__":
-    process_shapefiles()
+    main()

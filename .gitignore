@@ -6,3 +6,6 @@ __pycache__/
 /input/
 /output/
 /reservoir/
+
+optimize/
+generate_ground_truth_multi.py
