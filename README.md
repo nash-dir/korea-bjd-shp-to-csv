@@ -76,7 +76,7 @@ python bjd_geometry_to_csv.py --input-dir ./input --output-dir ./output --encodi
 | `SGG_OID` | 원천도형_ID | `1410` |
 | `center_latitude` | 중심점 위도 (EPSG:4326) | `37.8123...` |
 | `center_longitude` | 중심점 경도 (EPSG:4326) | `127.456...` |
-| `radius_km` | **외접원 반지름 (중심지 거리 보정용)** | `2.45` (km) |
+| `radius_km` | **최소 외접원 반지름 (중심지 거리 보정용)** | `2.45` (km) |
 | `filename` | 원천 파일명 | `LSMD_...shp` |
 
 ---
@@ -146,7 +146,7 @@ python bjd_csv_to_fulladdress.py --base-file LSCT_LAWDCD.csv --data-file bjd_251
 
 **브이월드 reverse-geocoding API를 활용한 법정동 CSV 딕셔너리 중심좌표 검증 유틸리티**
 
-이 저장소의 bjd_csv_to_fulladdress로 생성된 CSV 딕셔너리의 중심좌표가, 실제 해당 행정구역(읍면동/리) 내부에 위치하는지 검증하는 스크립트입니다. V-World의 Reverse Geocoding API를 사용하여 좌표를 주소로 변환하고, 이를 원본 법정동 명칭과 대조합니다.
+이 저장소의 bjd_csv_to_fulladdress로 생성된 CSV 딕셔너리의 중심좌표가, 실제 해당 행정구역(읍면동/리) 내부에 위치하는지 검증하는 스크립트입니다. 브이월드의 Reverse Geocoding API를 사용하여 좌표를 주소로 변환하고, 이를 원본 법정동 명칭과 대조합니다.
 
 ### 주요 기능
 
@@ -200,7 +200,7 @@ python bjd_csv_API_verification.py --input-csv LSCT_LAWDCD_coords_251117_revised
 *   전체 27,647개 법정동 코드 레코드 중 21,687건의 중심지 좌표와 `radius_km`이 포함되어 있습니다. 이 파일에 포함된 `radius_km`은 과거 로직에 따라 '외접 직사각형 대각선 길이 절반'으로 계산되어 있는 점에 유의 부탁드립니다. 이후 보다 정확한 계산을 위해 '외접원 반지름'으로 대체하였지만, 과거 데이터까지 소급해서 변경하진 않았습니다(변경이 반영된 데이터는 `251130/LSCT_LAWDCD_coords_251130_revised_verified.csv` 참조).
 *   나머지 5,960건은 브이월드 2025. 11.자 shp 파일에 지오메트리가 포함되지 않았거나 매핑 오류가 발생하는 등으로 좌표 정보가 누락되었습니다.
 *   누락된 5,960건 중 5,636건은 폐쇄된 법정동입니다(DEL_DT에 삭제일 기재). 이를 제외한 324건 중 281건은 도/시군구 단위 상위행정구역이며, 나머지 43건은 아래 목록과 같습니다. 
-*   아래 표의 43건은 VWorld에서 제공하는 쉐이프파일(.shp)에는 존재하지 않으나, 행정안전부 법정동 마스터 코드(`LSCT_LAWDCD.csv`)에는 존재하는 43개 법정동 목록입니다.
+*   아래 표의 43건은 브이월드에서 제공하는 쉐이프파일(.shp)에는 존재하지 않으나, 행정안전부 법정동 마스터 코드(`LSCT_LAWDCD.csv`)에는 존재하는 43개 법정동 목록입니다.
 *   이 데이터는 `bjd_csv_to_fulladdress.py` 스크립트 실행 시, `full_address`는 생성되지만 `center_latitude` 등 좌표값이 `null` (NaN)로 남게 되는 대상입니다.
 
 #### LSCT_LAWDCD_coords_251117_revised.csv
@@ -208,11 +208,13 @@ python bjd_csv_API_verification.py --input-csv LSCT_LAWDCD_coords_251117_revised
 *   라벨링 테이블 및 결측치 fill in 로직은 `revision_report_251117.md`에 설명하였습니다.
 
 #### LSCT_LAWDCD_coords_251117_revised_verified.csv
-*   위 `LSCT_LAWDCD_coords_251117_revised.csv`의 중심지 좌표를 Vworld API로 reverse-geocoding한 주소(`center_address`), 그리고 해당 주소가 딕셔너리 내 `full_address`와 일치하는지(`verified`) 추가로 검증한 자료입니다.
+*   위 `LSCT_LAWDCD_coords_251117_revised.csv`의 중심지 좌표를 브이월드 API로 reverse-geocoding한 주소(`center_address`), 그리고 해당 주소가 딕셔너리 내 `full_address`와 일치하는지(`verified`) 추가로 검증한 자료입니다.
 *   대한민국 법정동코드가 존재하는 총 27,647건의 레코드 중 중심좌표가 수록된 21,701건을 API에 요청하였습니다. 오류 175건을 제외하고 검증 가능한 나머지 21,526건 중 21,367건은 `full_address`와 일치하는 것으로 확인됩니다(정확도 99.26%).
 *   `verified=0`인 법정동을 몇 개 선정해 확인해 보니 대부분 도넛, 초승달과 같은 형상이었습니다.
 
 ### `/results/251130`
+#### LSCT_LAWDCD_coords_251130.csv
+*   `LSCT_LAWDCD_coords_251117.csv`(보정·검증 전 base)에서 `radius_km`만 **최소 외접원 반지름**으로 대체한 파일입니다. 결측치 수동 보정과 API 검증은 반영되지 않았습니다(`Exception`·`center_address`·`verified` 컬럼 없음).
 #### LSCT_LAWDCD_coords_251130_revised_verified.csv
 *   본 데이터는 2025. 11. 17.자 `LSCT_LAWDCD_coords_251117_revised_verified.csv`에서 `radius_km`만 **지오메트리 최소 외접원 반지름**으로 대체한 것입니다.
 *   **법정동 코드, 전체 주소, 중심좌표 등 최종 데이터만 필요하신 분은 이것만 다운받으셔도 됩니다.**
