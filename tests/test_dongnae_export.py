@@ -46,25 +46,3 @@ class TestToDongnae:
         with pytest.raises(ValueError, match="DEL_DT"):
             dn.to_dongnae(_build([]).drop(columns=["DEL_DT"]))
 
-
-class TestFillMissingCoords:
-    def test_fills_only_missing_rows(self):
-        df = _build([
-            ["5011033022", "제주특별자치도 제주시 우도면 서광리", None, None, None, None],
-            ["1111010100", "서울특별시 종로구 청운동", None, "37.5", "126.9", "0.5"],
-        ])
-        fallback = _build([
-            ["5011033022", "제주특별자치도 제주시 우도면 서광리", None, "33.5", "126.9", "2.0"],
-            ["1111010100", "서울특별시 종로구 청운동", None, "0", "0", "9"],
-        ])
-        out, filled = dn.fill_missing_coords(df, fallback)
-        assert filled == 1
-        assert out.loc[0, ["center_latitude", "center_longitude", "radius_km"]].tolist() == ["33.5", "126.9", "2.0"]
-        # 새 결과에 이미 좌표가 있는 행은 덮어쓰지 않는다
-        assert out.loc[1, "center_latitude"] == "37.5"
-
-    def test_fallback_without_coords_is_ignored(self):
-        df = _build([["4100000000", "경기도", None, None, None, None]])
-        out, filled = dn.fill_missing_coords(df, df)
-        assert filled == 0
-        assert out["center_latitude"].isna().all()

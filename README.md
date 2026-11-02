@@ -1,11 +1,12 @@
 # korea-bjd-shp-to-csv
 
-이 저장소는 대한민국 법정동 쉐이프파일(.shp)을 처리하고, 이를 법정동 마스터 코드와 병합·검증하고 dongnae 엔진용 데이터로 내보내는 네 가지 파이썬 유틸리티를 제공합니다.
+이 저장소는 대한민국 법정동 쉐이프파일(.shp)을 처리하고, 이를 법정동 마스터 코드와 병합·검증하고 dongnae 엔진용 데이터로 내보내는 다섯 가지 파이썬 유틸리티를 제공합니다.
 
 * 가.  **`bjd_geometry_to_csv.py`**: 쉐이프파일에서 중심좌표, 반경(radius) 등을 추출합니다.
 * 나.  **`bjd_csv_to_fulladdress.py`**: 법정동 마스터 파일에 위 좌표를 병합하고, 전체 주소(`full_address`)를 생성합니다.
 * 다. **`bjd_csv_API_verification.py`**: 추출된 좌표가 실제 주소와 일치하는지 API로 검증합니다.
-* 라. **`bjd_csv_to_dongnae.py`**: 병합 결과를 [dongnae](https://github.com/nash-dir/dongnae) 엔진용 CSV로 변환합니다(폐지 법정동 제외).
+* 라. **`bjd_csv_apply_revisions.py`**: Exception 라벨을 붙이고, shp로 구할 수 없는 법정동의 수작업 보정을 명세 파일에서 적용합니다.
+* 마. **`bjd_csv_to_dongnae.py`**: 보정 결과를 [dongnae](https://github.com/nash-dir/dongnae) 엔진용 CSV로 변환합니다(폐지 법정동 제외).
 
 ## 분석 대상 데이터
 
@@ -201,20 +202,42 @@ python bjd_csv_API_verification.py --input-csv LSCT_LAWDCD_coords_251117_revised
 | verified | 검증 결과 (1:일치, 0:불일치, 빈칸:확인불가) | 1 |
 
 
-## 라. bjd_csv_to_dongnae
+## 라. bjd_csv_apply_revisions
 
-**병합 결과 → dongnae 엔진용 CSV 변환 유틸리티**
+**Exception 라벨 + 수작업 보정 적용 유틸리티**
 
-`bjd_csv_to_fulladdress.py` 결과물을 dongnae 스키마(`dnid`, `dnname`, `dnlatitude`, `dnlongitude`, `dnradius`)로 변환합니다.
+shp만으로는 좌표를 얻을 수 없거나 부정확한 법정동(미수복지역, 행정동 중첩, 도형 누락 등 43건)을 [`revisions/manual_revisions.csv`](revisions/manual_revisions.csv) 명세대로 보정하고, 모든 행에 `Exception` 라벨을 붙입니다. 라벨 정의와 보정 사유는 [`revision_report_251117.md`](results/251117/revision_report_251117.md)에 있습니다.
 
-* 좌표가 없는 행과 **폐지된 법정동(`DEL_DT` 기재)** 은 제외합니다. 구 코드 shp(예: 2024. 1. 개편 전 `LSMD_ADM_SECT_RI_45_202401`)가 `input/`에 남아 있으면 폐지 코드에도 좌표가 붙어, 같은 지역이 신·구 코드로 중복되기 때문입니다.
-* `--fallback-csv`를 주면, 새 결과에 좌표가 없는 행을 이전 결과물(수동 보정된 `..._revised_verified.csv`)의 좌표로 채웁니다.
+* 라벨: 폐지 법정동(`DEL_DT` 기재)은 `1`, 시도·시군구 단위는 `2`, 나머지는 `0`. 명세의 행은 명세의 라벨(`3`·`4`·`5` 등).
+* 명세의 `method`:
+
+| method | 동작 | 예 |
+| :--- | :--- | :--- |
+| `none` | 좌표 없음 | 미수복지역 29건 |
+| `copy` | `source` 법정동의 중심좌표·반경을 그대로 사용 | 해남읍 부호리 → 내사리 |
+| `proxy` | 대체좌표(주민센터 등) + 명세의 `radius_km`, 비어 있으면 `source` 법정동들의 반경 평균 | 마포구 서교동 |
+| `manual` | 명세의 중심좌표·반경을 그대로 사용 | 남이면 척산리 |
+
+* `copy`·`proxy`의 반경은 실행할 때의 계산값에서 다시 구하므로, 반경 계산 방식이 바뀌어도 보정 행이 옛 값에 머무르지 않습니다.
+* 명세가 shp에서 계산된 좌표를 덮어쓰게 되면(원천 데이터가 고쳐진 경우) `[확인 필요]`로 알려 줍니다.
 
 ```bash
-python bjd_csv_to_dongnae.py -i results/261102/LSCT_LAWDCD_coords_261102.csv   -o results/261102/dongnaeKR_261102.csv   -f results/251130/LSCT_LAWDCD_coords_251130_revised_verified.csv
+python bjd_csv_apply_revisions.py -i results/261102/LSCT_LAWDCD_coords_261102.csv -o results/261102/LSCT_LAWDCD_coords_261102_revised.csv
 ```
 
-## 마. 산출 결과물
+## 마. bjd_csv_to_dongnae
+
+**보정 결과 → dongnae 엔진용 CSV 변환 유틸리티**
+
+`bjd_csv_apply_revisions.py` 결과물을 dongnae 스키마(`dnid`, `dnname`, `dnlatitude`, `dnlongitude`, `dnradius`)로 변환합니다.
+
+* 좌표가 없는 행과 **폐지된 법정동(`DEL_DT` 기재)** 은 제외합니다. 구 코드 shp(예: 2024. 1. 개편 전 `LSMD_ADM_SECT_RI_45_202401`)가 `input/`에 남아 있으면 폐지 코드에도 좌표가 붙어, 같은 지역이 신·구 코드로 중복되기 때문입니다.
+
+```bash
+python bjd_csv_to_dongnae.py -i results/261102/LSCT_LAWDCD_coords_261102_revised.csv -o results/261102/dongnaeKR_261102.csv
+```
+
+## 바. 산출 결과물
 ### `/results/251117`
 #### LSCT_LAWDCD_coords_251117.csv
 *   브이월드에서 `2025. 11. 17.자 데이터`를 다운로드받아 계산한 결과물입니다. 
@@ -238,15 +261,18 @@ python bjd_csv_to_dongnae.py -i results/261102/LSCT_LAWDCD_coords_261102.csv   -
 *   `LSCT_LAWDCD_coords_251117.csv`(보정·검증 전 base)에서 `radius_km`만 **최소 외접원 반지름**으로 대체한 파일입니다. 결측치 수동 보정과 API 검증은 반영되지 않았습니다(`Exception`·`center_address`·`verified` 컬럼 없음).
 #### LSCT_LAWDCD_coords_251130_revised_verified.csv
 *   본 데이터는 2025. 11. 17.자 `LSCT_LAWDCD_coords_251117_revised_verified.csv`에서 `radius_km`만 **지오메트리 최소 외접원 반지름**으로 대체한 것입니다.
-*   ⚠️ 이 파일의 좌표·반경에는 아래 `261102`에서 보정한 원천 데이터 오류(떨어진 조각으로 반경이 50km 이상 부풀려진 7건 등)가 남아 있습니다. 또한 폐지된 전라북도(45) 리 1,463건에 좌표가 붙어 있으며 `Exception=0`으로 라벨되어 있습니다(`DEL_DT=20240117`).
+*   ⚠️ 이 파일의 좌표·반경에는 아래 `261102`에서 보정한 원천 데이터 오류(떨어진 조각으로 반경이 50km 이상 부풀려진 7건 등)가 남아 있습니다. 또한 폐지된 전라북도(45) 리 1,463건에 좌표가 붙어 있으며 `Exception=0`으로 라벨되어 있고(`DEL_DT=20240117`), 수작업 보정 11건의 반경이 `251117`의 옛 계산식 값 그대로이고, 척산리 반경(1.526)은 도형과 맞지 않습니다. 자세한 내용은 `261102/revision_report_261102.md` 참조.
 
 ### `/results/261102`
 같은 원천 데이터(브이월드 2025. 11.자 shp, 전북 리는 2024. 1.자 포함)를 보정된 파이프라인으로 다시 계산한 결과물입니다.
 
 #### LSCT_LAWDCD_coords_261102.csv
-*   `bjd_geometry_to_csv.py`(떨어진 조각 제거, 도형 내부 중심점, 정확한 외접원 반지름) → `bjd_csv_to_fulladdress.py`로 생성한 병합 결과입니다. 수동 보정·API 검증은 반영되지 않았습니다.
+*   `bjd_geometry_to_csv.py`(떨어진 조각 제거, 도형 내부 중심점, 정확한 외접원 반지름) → `bjd_csv_to_fulladdress.py`로 생성한 병합 결과입니다. 수작업 보정·API 검증은 반영되지 않았습니다.
+#### LSCT_LAWDCD_coords_261102_revised.csv
+*   위 파일에 `bjd_csv_apply_revisions.py`로 Exception 라벨과 수작업 보정 43건을 적용한 결과입니다. 이전 대비 바뀐 값(보정 행의 반경, 척산리 반경, 폐지 전북 리 라벨)은 [`revision_report_261102.md`](results/261102/revision_report_261102.md)에 정리했습니다. API 검증은 다시 하지 않았습니다.
+*   **법정동 코드, 전체 주소, 중심좌표 등 최종 데이터만 필요하신 분은 이것만 다운받으셔도 됩니다.**
 #### dongnaeKR_261102.csv
-*   위 파일을 `bjd_csv_to_dongnae.py`로 변환한 dongnae 엔진용 데이터(20,238건)입니다. 폐지 법정동 1,463건을 제외했고, shp에 지오메트리가 없어 수동 입력했던 14건은 `251130/..._revised_verified.csv`의 좌표로 채웠습니다.
+*   위 파일을 `bjd_csv_to_dongnae.py`로 변환한 dongnae 엔진용 데이터(20,238건)입니다. 폐지 법정동 1,463건은 제외했습니다.
 *   이전 dongnae-kr 데이터(`dongnaeKR_251130.csv`) 대비, ground truth(법정동 폴리곤 내부 무작위 좌표) 약 2만 점 표본 기준:
 
 | | 이전(251130) | 261102 |
@@ -259,7 +285,7 @@ python bjd_csv_to_dongnae.py -i results/261102/LSCT_LAWDCD_coords_261102.csv   -
 
 ## 개발 / 테스트
 
-순수 함수(컬럼 매핑, 코드 패딩, 떨어진 조각 제거, 중심점, 주소 정제, 검증 라벨링, dongnae 변환) 위주의 단위 테스트가 `tests/`에 있습니다.
+순수 함수(컬럼 매핑, 코드 패딩, 떨어진 조각 제거, 중심점, 주소 정제, 검증 라벨링, 수작업 보정 적용, dongnae 변환) 위주의 단위 테스트가 `tests/`에 있습니다.
 무거운 의존성(geopandas 등)은 실행 함수 내부에서 lazy import 되므로, 린트/테스트에는 `pandas`, `shapely`, `requests`만 있으면 됩니다.
 
 ```bash
