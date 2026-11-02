@@ -9,6 +9,7 @@ license-files = ["LICENSE"]
 dependencies = [
     "geopandas",
     "pandas",
+    "shapely",
     "tqdm",
     "requests",
     "python-dotenv",

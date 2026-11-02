@@ -47,3 +47,44 @@ class TestVerifyAddress:
     def test_both_names_blank_returns_0(self):
         row = {"RI_NM": "", "UMD_NM": ""}
         assert ver.verify_address(row, "어딘가의 주소") == 0
+
+    def test_partial_name_is_not_a_match(self):
+        # '상리'는 '신상리'의 부분 문자열이지만 다른 리다
+        row = {"RI_NM": "상리", "UMD_NM": "은풍면"}
+        assert ver.verify_address(row, "경상북도 예천군 은풍면 신상리 12") == 0
+
+
+class TestGetVworldAddress:
+    def test_network_error_does_not_leak_url_or_key(self, monkeypatch):
+        import requests
+
+        def boom(url, params, timeout):
+            raise requests.ConnectionError(f"Max retries exceeded with url: {url}key={params['key']}")
+
+        monkeypatch.setattr(requests, "get", boom)
+        monkeypatch.setattr(ver.time, "sleep", lambda s: None)
+        result = ver.get_vworld_address(36.7, 128.4, "SECRET-KEY", max_retries=2)
+        assert result == "통신오류: ConnectionError"
+        assert "SECRET-KEY" not in result
+
+    def test_retries_then_succeeds(self, monkeypatch):
+        import requests
+
+        class Ok:
+            status_code = 200
+
+            def json(self):
+                return {"response": {"status": "OK", "result": [{"text": "서울특별시 종로구 청운동 1"}]}}
+
+        calls = []
+
+        def flaky(url, params, timeout):
+            calls.append(1)
+            if len(calls) < 2:
+                raise requests.Timeout("timeout")
+            return Ok()
+
+        monkeypatch.setattr(requests, "get", flaky)
+        monkeypatch.setattr(ver.time, "sleep", lambda s: None)
+        assert ver.get_vworld_address(37.5, 126.9, "k") == "서울특별시 종로구 청운동 1"
+        assert len(calls) == 2

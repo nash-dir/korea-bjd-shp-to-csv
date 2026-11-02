@@ -1,10 +1,11 @@
 # korea-bjd-shp-to-csv
 
-이 저장소는 대한민국 법정동 쉐이프파일(.shp)을 처리하고, 이를 법정동 마스터 코드와 병합·검증하는 세 가지 파이썬 유틸리티를 제공합니다.
+이 저장소는 대한민국 법정동 쉐이프파일(.shp)을 처리하고, 이를 법정동 마스터 코드와 병합·검증하고 dongnae 엔진용 데이터로 내보내는 네 가지 파이썬 유틸리티를 제공합니다.
 
 * 가.  **`bjd_geometry_to_csv.py`**: 쉐이프파일에서 중심좌표, 반경(radius) 등을 추출합니다.
 * 나.  **`bjd_csv_to_fulladdress.py`**: 법정동 마스터 파일에 위 좌표를 병합하고, 전체 주소(`full_address`)를 생성합니다.
 * 다. **`bjd_csv_API_verification.py`**: 추출된 좌표가 실제 주소와 일치하는지 API로 검증합니다.
+* 라. **`bjd_csv_to_dongnae.py`**: 병합 결과를 [dongnae](https://github.com/nash-dir/dongnae) 엔진용 CSV로 변환합니다(폐지 법정동 제외).
 
 ## 분석 대상 데이터
 
@@ -29,7 +30,9 @@ GeoPandas를 이용해 브이월드 등에서 제공하는 법정동(읍면동/�
 
 1.  **지오메트리 연산:**
     * 법정동의 **중심좌표(위도, 경도)**를 자동으로 추출합니다.
-    * **`radius_km` 계산:** 미터 단위 좌표계(EPSG:5179)로 변환하여 **최소 외접원 반지름**을 계산합니다. 이는 특정 좌표와 법정동 중심지 사이의 거리를 적절히 조정하기 위한 매개변수입니다. 일례로, 특정 좌표에서 가장 가까운 법정동을 구할 때, '중심지와의 거리 - radius_km' 로직을 사용할 수 있습니다.
+    * **중심점:** 무게중심(centroid)을 씁니다. 단일 폴리곤인데 무게중심이 도형 밖에 찍히는 경우(도넛·초승달 형상)에는 도형 내부가 보장되는 대표점(`representative_point`)을 씁니다.
+    * **떨어진 조각 제거:** 브이월드 원천 shp 일부 도형에는 본체와 같은 경도에서 위도만 약 0.9°(≈100km) 밀린 작은 조각이 붙어 있습니다(예: 하동군 하동읍 읍내리, 군산시 개사동). 본체에서 80km 이상 떨어져 있고 면적이 전체의 5% 미만인 조각은 계산에서 제외하고, 실행 로그에 `[보정]`으로 남깁니다. 실제 도서 지역(옹진·신안·여수 등)의 섬은 본체와의 간격이 70km 미만이라 유지됩니다.
+    * **`radius_km` 계산:** 미터 단위 좌표계(EPSG:5179)로 변환하여 **최소 외접원 반지름**을 계산합니다(`shapely.minimum_bounding_radius`). 이는 특정 좌표와 법정동 중심지 사이의 거리를 적절히 조정하기 위한 매개변수입니다. 일례로, 특정 좌표에서 가장 가까운 법정동을 구할 때, '중심지와의 거리 - radius_km' 로직을 사용할 수 있습니다.
 
 2.  **데이터 정제 (Cleansing):**
     * **코드 표준화:** 8자리(읍면동) 코드는 자동으로 '00'을 패딩하여 **10자리 표준 코드**로 변환합니다.
@@ -159,7 +162,12 @@ python bjd_csv_to_fulladdress.py --base-file LSCT_LAWDCD.csv --data-file bjd_251
    * **0 (불일치):** 좌표가 가리키는 실제 주소가 원본 법정동과 다른 경우 (주로 도넛 모양, 초승달 모양 등 기형적인 행정구역에서 중심점이 외부에 찍힌 경우).
    * **NULL (확인 불가):** API 오류, 주소 미존재, 혹은 좌표값이 없는 경우.
 
-3. **결과 리포트 생성:**
+3. **판정 방식:**
+   * 지번 주소만 요청합니다(`type=parcel`). 도로명 주소에는 리 명칭이 없어 올바른 좌표도 불일치로 판정되기 때문입니다.
+   * 명칭은 공백 기준 토큰 단위로 비교합니다('상리'가 '신상리'에 일치하는 오탐 방지).
+   * 통신오류는 최대 3회 재시도하고, 오류 칸에는 예외 종류만 기록합니다(요청 URL에 포함된 API 키가 결과 CSV에 남지 않도록).
+
+4. **결과 리포트 생성:**
    * 작업 완료 후, 전체 요청 건수와 일치/불일치 건수를 요약한 txt 리포트를 자동으로 생성합니다.
 
 ### 사용법
@@ -193,7 +201,20 @@ python bjd_csv_API_verification.py --input-csv LSCT_LAWDCD_coords_251117_revised
 | verified | 검증 결과 (1:일치, 0:불일치, 빈칸:확인불가) | 1 |
 
 
-## 라. 산출 결과물
+## 라. bjd_csv_to_dongnae
+
+**병합 결과 → dongnae 엔진용 CSV 변환 유틸리티**
+
+`bjd_csv_to_fulladdress.py` 결과물을 dongnae 스키마(`dnid`, `dnname`, `dnlatitude`, `dnlongitude`, `dnradius`)로 변환합니다.
+
+* 좌표가 없는 행과 **폐지된 법정동(`DEL_DT` 기재)** 은 제외합니다. 구 코드 shp(예: 2024. 1. 개편 전 `LSMD_ADM_SECT_RI_45_202401`)가 `input/`에 남아 있으면 폐지 코드에도 좌표가 붙어, 같은 지역이 신·구 코드로 중복되기 때문입니다.
+* `--fallback-csv`를 주면, 새 결과에 좌표가 없는 행을 이전 결과물(수동 보정된 `..._revised_verified.csv`)의 좌표로 채웁니다.
+
+```bash
+python bjd_csv_to_dongnae.py -i results/261102/LSCT_LAWDCD_coords_261102.csv   -o results/261102/dongnaeKR_261102.csv   -f results/251130/LSCT_LAWDCD_coords_251130_revised_verified.csv
+```
+
+## 마. 산출 결과물
 ### `/results/251117`
 #### LSCT_LAWDCD_coords_251117.csv
 *   브이월드에서 `2025. 11. 17.자 데이터`를 다운로드받아 계산한 결과물입니다. 
@@ -217,16 +238,32 @@ python bjd_csv_API_verification.py --input-csv LSCT_LAWDCD_coords_251117_revised
 *   `LSCT_LAWDCD_coords_251117.csv`(보정·검증 전 base)에서 `radius_km`만 **최소 외접원 반지름**으로 대체한 파일입니다. 결측치 수동 보정과 API 검증은 반영되지 않았습니다(`Exception`·`center_address`·`verified` 컬럼 없음).
 #### LSCT_LAWDCD_coords_251130_revised_verified.csv
 *   본 데이터는 2025. 11. 17.자 `LSCT_LAWDCD_coords_251117_revised_verified.csv`에서 `radius_km`만 **지오메트리 최소 외접원 반지름**으로 대체한 것입니다.
-*   **법정동 코드, 전체 주소, 중심좌표 등 최종 데이터만 필요하신 분은 이것만 다운받으셔도 됩니다.**
+*   ⚠️ 이 파일의 좌표·반경에는 아래 `261102`에서 보정한 원천 데이터 오류(떨어진 조각으로 반경이 50km 이상 부풀려진 7건 등)가 남아 있습니다. 또한 폐지된 전라북도(45) 리 1,463건에 좌표가 붙어 있으며 `Exception=0`으로 라벨되어 있습니다(`DEL_DT=20240117`).
+
+### `/results/261102`
+같은 원천 데이터(브이월드 2025. 11.자 shp, 전북 리는 2024. 1.자 포함)를 보정된 파이프라인으로 다시 계산한 결과물입니다.
+
+#### LSCT_LAWDCD_coords_261102.csv
+*   `bjd_geometry_to_csv.py`(떨어진 조각 제거, 도형 내부 중심점, 정확한 외접원 반지름) → `bjd_csv_to_fulladdress.py`로 생성한 병합 결과입니다. 수동 보정·API 검증은 반영되지 않았습니다.
+#### dongnaeKR_261102.csv
+*   위 파일을 `bjd_csv_to_dongnae.py`로 변환한 dongnae 엔진용 데이터(20,238건)입니다. 폐지 법정동 1,463건을 제외했고, shp에 지오메트리가 없어 수동 입력했던 14건은 `251130/..._revised_verified.csv`의 좌표로 채웠습니다.
+*   이전 dongnae-kr 데이터(`dongnaeKR_251130.csv`) 대비, ground truth(법정동 폴리곤 내부 무작위 좌표) 약 2만 점 표본 기준:
+
+| | 이전(251130) | 261102 |
+| :--- | :--- | :--- |
+| Top-1 (해당 법정동 또는 상위 읍면동 일치) | 58.2% | **69.6%** |
+| Top-3 (해당 법정동 정확히 포함) | 65.2% | **74.9%** |
+
+*   표본은 법정동마다 같은 개수의 점을 뽑은 것이라 면적·인구 가중치가 없습니다. dongnae README의 브이월드 API 기준 벤치마크와는 평가 방식이 달라 수치를 직접 비교할 수 없습니다.
 
 
 ## 개발 / 테스트
 
-순수 함수(컬럼 매핑, 코드 패딩, 주소 정제, 검증 라벨링) 위주의 단위 테스트가 `tests/`에 있습니다.
-무거운 의존성(geopandas 등)은 실행 함수 내부에서 lazy import 되므로, 린트/테스트에는 `pandas`만 있으면 됩니다.
+순수 함수(컬럼 매핑, 코드 패딩, 떨어진 조각 제거, 중심점, 주소 정제, 검증 라벨링, dongnae 변환) 위주의 단위 테스트가 `tests/`에 있습니다.
+무거운 의존성(geopandas 등)은 실행 함수 내부에서 lazy import 되므로, 린트/테스트에는 `pandas`, `shapely`, `requests`만 있으면 됩니다.
 
 ```bash
-pip install pandas pytest ruff
+pip install pandas shapely requests pytest ruff==0.15.9
 ruff check .
 pytest
 ```

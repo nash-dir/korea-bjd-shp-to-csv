@@ -15,11 +15,18 @@ INPUT_CSV = "LSCT_LAWDCD_coords_251117_revised.csv"   # 원본 파일
 OUTPUT_CSV = "LSCT_LAWDCD_with_verified_address.csv"  # 결과 CSV 파일
 BATCH_SIZE = 100                                      # 중간 저장 단위
 REQUEST_DELAY = 0.05                                  # API 요청 간격 (초)
+MAX_RETRIES = 3                                       # 통신오류 시 재시도 횟수
 # ===========================================================
 
-def get_vworld_address(lat, lon, api_key):
+def get_vworld_address(lat, lon, api_key, max_retries=MAX_RETRIES):
     """
-    VWorld API를 통해 좌표 -> 주소(도로명/지번) 변환
+    VWorld API를 통해 좌표 -> 지번 주소 변환
+
+    - 지번(parcel) 주소만 요청합니다. 도로명 주소에는 리(RI) 명칭이 없어서, 첫 결과가
+      도로명이면 올바른 좌표도 불일치(0)로 판정되기 때문입니다.
+    - 통신오류는 max_retries회까지 재시도합니다.
+    - 오류 문자열에는 예외 종류만 남깁니다. requests 예외 메시지에는 요청 URL이
+      통째로 들어 있어, 그대로 저장하면 결과 CSV에 API 키(key=...)가 노출됩니다.
     """
     import requests
 
@@ -33,14 +40,23 @@ def get_vworld_address(lat, lon, api_key):
         "crs": "epsg:4326",
         "point": f"{lon},{lat}",
         "format": "json",
-        "type": "both",
+        "type": "parcel",
         "zipcode": "false",
         "simple": "false",
         "key": api_key
     }
 
+    response = None
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, timeout=5)
+            break
+        except requests.RequestException as e:
+            if attempt == max_retries - 1:
+                return f"통신오류: {type(e).__name__}"
+            time.sleep(2 ** attempt)
+
     try:
-        response = requests.get(url, params=params, timeout=5)
         if response.status_code == 200:
             data = response.json()
             status = data.get('response', {}).get('status')
@@ -48,20 +64,22 @@ def get_vworld_address(lat, lon, api_key):
                 results = data.get('response', {}).get('result', [])
                 if results:
                     return results[0].get('text')
+                return "주소 미존재"
             elif status == 'NOT_FOUND':
                 return "주소 미존재"
             else:
                 return f"API오류: {status}"
         return f"HTTP오류: {response.status_code}"
-    except Exception as e:
-        return f"통신오류: {str(e)}"
+    except ValueError as e:  # JSON 파싱 실패
+        return f"응답오류: {type(e).__name__}"
 
 def verify_address(row, api_addr):
     """
     [검증 로직 3단 분리]
     Returns:
         None (NULL): API 결과가 없거나 '오류', '미존재'인 경우
-        1: 리(RI) 또는 읍면동(UMD) 명칭이 API 주소에 포함된 경우
+        1: 리(RI) 또는 읍면동(UMD) 명칭이 API 주소의 한 토큰과 정확히 일치하는 경우
+           (부분 문자열 비교는 '상리'가 '신상리'에 일치하는 오탐이 생겨 토큰 단위로 비교)
         0: API 응답은 정상이나, 명칭이 매칭되지 않는 경우
     """
     if pd.isna(api_addr):
@@ -82,11 +100,12 @@ def verify_address(row, api_addr):
     if umd_nm.lower() == 'nan':
         umd_nm = ''
 
-    # 매칭 로직
+    # 매칭 로직 (공백 기준 토큰 단위)
+    tokens = str_api.split()
     if ri_nm:
-        return 1 if ri_nm in str_api else 0
+        return 1 if ri_nm in tokens else 0
     elif umd_nm:
-        return 1 if umd_nm in str_api else 0
+        return 1 if umd_nm in tokens else 0
     
     return 0
 
@@ -109,7 +128,8 @@ def main(input_csv=INPUT_CSV, output_csv=OUTPUT_CSV, batch_size=BATCH_SIZE,
         print(f"[오류] 입력 파일이 존재하지 않습니다: {input_csv}")
         return
 
-    df = pd.read_csv(input_csv, dtype={'legal_dong_code': str})
+    # 코드 컬럼(LAWD_CD, OLD_LAWDCD 등)이 숫자로 바뀌지 않도록 전부 str로 읽습니다.
+    df = pd.read_csv(input_csv, dtype=str, encoding='utf-8-sig')
     
     # 3. 통계 카운터 초기화
     cnt_total = len(df)      # 총 레코드 수

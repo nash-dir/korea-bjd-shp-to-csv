@@ -7,6 +7,8 @@
 1. 'input' 폴더 내의 모든 .shp 파일을 순회하며 읽어옵니다.
 2. 쉐이프파일의 테이블정의서(주석 참고)에 따라 컬럼명을 표준화하여 매핑합니다.
 3. 지오메트리(도형) 정보를 이용해 중심점(위경도), 미터(EPSG:5179) 기준 최소 외접원 반지름(radius_km)를 계산합니다. 'radius_km'은 특정 좌표부터 법정동 중심점까지의 거리를 조정하기 위한 보정값입니다.
+   - 본체에서 80km 이상 떨어진 작은 조각(원천 데이터 오류)은 계산에서 제외합니다.
+   - 무게중심이 도형 밖에 찍히는 단일 폴리곤은 도형 내부 대표점을 중심점으로 씁니다.
 4. 'output/temp_...'로 시작하는 임시 CSV를 파일별로 생성합니다.
 5. 모든 임시 CSV를 하나로 병합하여 'output' 폴더에 최종 결과물(result.csv, error.csv)을 저장합니다.
 6. 임시 CSV 파일들을 삭제합니다.
@@ -17,7 +19,7 @@
 - (오류처리) 법정동명(tip)에 한글이 포함되지 않으면 'error.csv'로 분리합니다.
 
 [필요 라이브러리]
-pip install geopandas pandas tqdm
+pip install geopandas pandas shapely tqdm
 
 [권장 디렉토리 구조]
 - (현재 디렉토리)/
@@ -59,6 +61,15 @@ CODE_CANDIDATES = ['RI_CD', 'EMD_CD']
 NAME_CANDIDATES = ['RI_NM', 'EMD_NM']
 SE_CANDIDATES = ['COL_ADM_SE']
 SGG_CANDIDATES = ['SGG_OID']
+
+# 4. 떨어진 조각(stray part) 제거 기준
+# 브이월드 원천 shp 일부 도형에는 본체와 같은 경도에서 위도만 약 0.9°(≈100km) 밀린
+# 작은 조각이 붙어 있습니다(예: 하동군 하동읍 읍내리, 군산시 개사동). 이 조각이
+# 외접원 반지름을 50km 이상으로 부풀리므로, 본체(최대 면적 조각)에서 STRAY_MIN_GAP_M
+# 이상 떨어져 있고 전체 면적의 STRAY_MAX_SHARE 미만인 조각은 계산에서 제외합니다.
+# 실제 도서 지역(옹진·신안·여수 등)의 섬은 본체와의 간격이 70km 미만이라 유지됩니다.
+STRAY_MIN_GAP_M = 80_000
+STRAY_MAX_SHARE = 0.05
 
 # ===========================================================
 # [데이터 소스]
@@ -135,6 +146,46 @@ def pad_code(code):
     return code
 
 
+def drop_stray_parts(geom, min_gap_m=STRAY_MIN_GAP_M, max_share=STRAY_MAX_SHARE):
+    """
+    멀티폴리곤에서 본체와 멀리 떨어진 작은 조각을 제거합니다. (순수 함수, 미터 좌표계 기준)
+
+    Returns:
+        (정리된 지오메트리, 제거한 조각 수)
+    """
+    from shapely.geometry import MultiPolygon
+
+    if geom is None or geom.geom_type != 'MultiPolygon':
+        return geom, 0
+
+    parts = list(geom.geoms)
+    main = max(parts, key=lambda p: p.area)
+    total = geom.area
+    keep = [
+        p for p in parts
+        if p is main or not (p.area / total < max_share and main.distance(p) >= min_gap_m)
+    ]
+    if len(keep) == len(parts):
+        return geom, 0
+    cleaned = keep[0] if len(keep) == 1 else MultiPolygon(keep)
+    return cleaned, len(parts) - len(keep)
+
+
+def center_point(geom):
+    """
+    법정동 중심점을 반환합니다. (순수 함수)
+
+    기본은 무게중심(centroid)입니다. 다만 단일 폴리곤인데 무게중심이 도형 밖에 찍히는
+    경우(도넛·초승달 형상)에는 도형 내부가 보장되는 representative_point()를 씁니다.
+    여러 섬으로 이루어진 멀티폴리곤은 무게중심이 바다에 있는 편이 원 모델에 더 맞으므로
+    그대로 둡니다.
+    """
+    cen = geom.centroid
+    if geom.geom_type == 'Polygon' and not geom.contains(cen):
+        return geom.representative_point()
+    return cen
+
+
 def post_process_and_save(final_df, output_dir, final_filename, error_filename):
     """
     [후처리] 최종 병합된 데이터프레임을 검증하고, 정상/오류 파일로 분리 저장합니다.
@@ -193,6 +244,7 @@ def process_shapefiles(input_dir=INPUT_DIR, output_dir=OUTPUT_DIR, encoding=SHP_
     """
     # geopandas, tqdm은 무거운/실행 전용 의존성이므로 실제 실행 시점에만 import 합니다.
     import geopandas as gpd
+    import shapely
     from tqdm import tqdm
 
     # --- 0. 준비 단계 ---
@@ -244,15 +296,21 @@ def process_shapefiles(input_dir=INPUT_DIR, output_dir=OUTPUT_DIR, encoding=SHP_
             # (1) 좌표계 변환 (EPSG:5179 - 미터 단위)
             gdf_5179 = gdf.to_crs(epsg=5179)
             
-            # (2) 외접원(Minimum Bounding Circle) 반지름 (radius_km) 계산
-            # minimum_bounding_circle()은 외접원을 폴리곤 형태로 반환합니다.
-            # 따라서 원의 면적 공식(A = πr²)을 이용해 반지름을 역산합니다: r = sqrt(A / π)
-            mbc_geometry = gdf_5179.geometry.minimum_bounding_circle()
-            radius_m = (mbc_geometry.area / 3.141592653589793) ** 0.5
-            radius_km = radius_m / 1000  # 미터(m)를 킬로미터(km)로 변환
-            
-            # (3) 중심점(Centroid) 계산 및 변환 (EPSG:4326 - 위/경도)
-            centroids = gdf_5179.geometry.centroid.to_crs(epsg=4326)
+            # (2) 떨어진 조각(stray part) 제거 - 원천 데이터 오류 보정
+            cleaned = [drop_stray_parts(g) for g in gdf_5179.geometry]
+            geoms = gpd.GeoSeries([g for g, _ in cleaned], index=gdf_5179.index, crs=gdf_5179.crs)
+            for code, (_, n) in zip(gdf[code_col], cleaned):
+                if n:
+                    print(f"\n[보정] {file_name} {code}: 떨어진 조각 {n}개 제외")
+
+            # (3) 외접원(Minimum Bounding Circle) 반지름 (radius_km) 계산
+            # shapely.minimum_bounding_radius로 정확한 반지름을 구합니다.
+            # (이전에는 외접원을 근사한 다각형의 면적에서 역산해 약간 작게 나왔습니다.)
+            radius_km = pd.Series(shapely.minimum_bounding_radius(geoms.values), index=geoms.index) / 1000
+
+            # (4) 중심점 계산 및 변환 (EPSG:4326 - 위/경도)
+            centroids = gpd.GeoSeries([center_point(g) for g in geoms], index=geoms.index,
+                                      crs=geoms.crs).to_crs(epsg=4326)
             
             # 4. 데이터프레임 조립 (테이블정의서 기반)
             df_result = pd.DataFrame()

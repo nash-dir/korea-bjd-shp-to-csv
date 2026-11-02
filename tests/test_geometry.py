@@ -72,3 +72,67 @@ class TestValidateCodeAndTip:
     def test_hangul_jamo_counts(self):
         # 자음/모음 단독(ㄱ, ㅏ 등)도 한글로 인정
         assert geo.validate_code_and_tip("41590253", "ㄱ") is None
+
+
+class TestDropStrayParts:
+    # 미터 좌표계 기준 사각형 헬퍼
+    @staticmethod
+    def _box(x, y, size):
+        from shapely.geometry import box
+        return box(x, y, x + size, y + size)
+
+    def test_drops_small_far_part(self):
+        from shapely.geometry import MultiPolygon
+        # 본체 2km 사각형 + 100km 북쪽의 200m 조각 (원천 데이터의 위도 밀림 패턴)
+        geom = MultiPolygon([self._box(0, 0, 2000), self._box(0, 100_000, 200)])
+        cleaned, dropped = geo.drop_stray_parts(geom)
+        assert dropped == 1
+        assert cleaned.geom_type == "Polygon"
+        assert cleaned.area == 2000 * 2000
+
+    def test_keeps_nearby_islands(self):
+        from shapely.geometry import MultiPolygon
+        # 30km 떨어진 작은 섬은 실제 도서 지역으로 보고 유지
+        geom = MultiPolygon([self._box(0, 0, 2000), self._box(30_000, 0, 200)])
+        cleaned, dropped = geo.drop_stray_parts(geom)
+        assert dropped == 0
+        assert cleaned is geom
+
+    def test_keeps_large_far_part(self):
+        from shapely.geometry import MultiPolygon
+        # 멀리 있어도 면적 비중이 크면(>=5%) 유지
+        geom = MultiPolygon([self._box(0, 0, 2000), self._box(0, 100_000, 1000)])
+        _, dropped = geo.drop_stray_parts(geom)
+        assert dropped == 0
+
+    def test_keeps_remaining_parts_as_multipolygon(self):
+        from shapely.geometry import MultiPolygon
+        geom = MultiPolygon([self._box(0, 0, 2000), self._box(5000, 0, 500),
+                             self._box(0, 100_000, 100)])
+        cleaned, dropped = geo.drop_stray_parts(geom)
+        assert dropped == 1
+        assert cleaned.geom_type == "MultiPolygon"
+        assert len(cleaned.geoms) == 2
+
+    def test_single_polygon_unchanged(self):
+        poly = self._box(0, 0, 1000)
+        assert geo.drop_stray_parts(poly) == (poly, 0)
+
+
+class TestCenterPoint:
+    def test_convex_polygon_uses_centroid(self):
+        from shapely.geometry import box
+        poly = box(0, 0, 10, 10)
+        assert geo.center_point(poly).equals(poly.centroid)
+
+    def test_crescent_uses_point_inside(self):
+        from shapely.geometry import box
+        # ㄷ자 형상: 무게중심이 오목한 빈 공간(도형 밖)에 찍힌다
+        crescent = box(0, 0, 10, 10).difference(box(3, 2, 10, 8))
+        assert not crescent.contains(crescent.centroid)
+        assert crescent.contains(geo.center_point(crescent))
+
+    def test_multipolygon_keeps_centroid(self):
+        from shapely.geometry import MultiPolygon, box
+        islands = MultiPolygon([box(0, 0, 1, 1), box(10, 0, 11, 1)])
+        assert geo.center_point(islands).equals(islands.centroid)

@@ -14,10 +14,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # ruff는 버전을 고정합니다(0.17부터 기본 규칙이 늘어 기존 코드가 실패).
       # 실행 전용 의존성(geopandas 등)은 함수 내부에서 lazy import 되므로,
-      # 린트/테스트에는 pandas + 도구 체인만 있으면 충분합니다.
+      # 린트/테스트에는 pandas + shapely(지오메트리 순수 함수) + requests(모킹 대상) + 도구 체인만 있으면 충분합니다.
       - name: Install dev tooling
-        run: python -m pip install --upgrade pip pandas pytest ruff
+        run: python -m pip install --upgrade pip pandas shapely requests pytest ruff==0.15.9
 
       - name: Ruff (lint)
         run: ruff check .
