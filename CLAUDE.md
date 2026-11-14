@@ -61,8 +61,10 @@ python -m optimize.evaluate results/<old>/dongnaeKR_<old>.csv results/<new>/dong
   shipping it, and quote those numbers (README results section).
 - `optimize.optimize_radius` is experimental. Never ship its output without an
   `evaluate` comparison showing it helps.
-- `optimize/output/` and `optimize/legacy/` (the 2025 scripts and their
-  outputs, including a ground truth with broken 8-digit ids) are gitignored.
+- `optimize/legacy/` holds the archived 2025 scripts (buggy, never run them;
+  excluded from ruff). Generated ground truth and outputs (`optimize/output/`,
+  legacy data) stay out of git: dense in-polygon samples would effectively
+  redistribute the CC BY-NC-ND boundaries.
 
 ## API verification
 

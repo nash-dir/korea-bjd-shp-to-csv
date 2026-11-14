@@ -299,7 +299,7 @@ python -m optimize.evaluate results/261102/dongnaeKR_261102.csv
 python -m optimize.optimize_radius -d results/261102/dongnaeKR_261102.csv -o optimize/output/optimized.csv
 ```
 
-* 2025년에 쓰던 이전 스크립트(`generate_ground_truth_multi.py`, `optimize_dnradius*.py`)와 그 산출물은 `optimize/legacy/`(gitignore)로 옮겼습니다. 이전 ground truth는 읍면동 코드를 8자리로 저장해 dongnae의 10자리 코드와 매칭되지 않았고, 그래서 읍면동 지점이 평가·최적화에서 빠졌습니다. CUDA 버전은 코드를 정수로 읽어 문자열 코드와 매칭되지 않았습니다. 이전 최적화 결과(`dongnaeKR_251130_optimized*.csv`)는 배포된 적이 없습니다.
+* 2025년에 쓰던 이전 스크립트(`generate_ground_truth_multi.py`, `optimize_dnradius*.py`)는 기록용으로 `optimize/legacy/`에 옮겨 두었습니다(사용 중지, [`optimize/legacy/README.md`](optimize/legacy/README.md) 참조). 그 산출물과 생성된 ground truth는 저장소에 넣지 않습니다. ground truth는 폴리곤 내부 좌표를 촘촘히 담아 경계 도형을 사실상 재현할 수 있어, 원천 데이터의 배포 조건(CC BY-NC-ND)에 맞지 않기 때문입니다. 이전 ground truth는 읍면동 코드를 8자리로 저장해 dongnae의 10자리 코드와 매칭되지 않았고, 그래서 읍면동 지점이 평가·최적화에서 빠졌습니다. CUDA 버전은 코드를 정수로 읽어 문자열 코드와 매칭되지 않았습니다. 이전 최적화 결과(`dongnaeKR_251130_optimized*.csv`)는 배포된 적이 없습니다.
 * 반경 조정의 한계: 상위 읍면동의 원은 하위 리 지점을 항상 포함하므로, 현재 투표 규칙에서는 침범(FP) 표가 대부분 상위 읍면동에 몰립니다. 계층 구조를 정리하기 전에는 큰 개선을 기대하기 어렵습니다.
 * 참고(2026. 11.): `261102` 데이터에 ground truth 10%로 3 epoch(기본 학습률) 돌린 결과, 같은 표본 기준 Top-1 69.37% → 69.38%, Top-3 74.83% → 74.87%로 사실상 변화가 없었습니다.
 

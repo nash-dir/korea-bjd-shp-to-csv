@@ -29,7 +29,11 @@ CLAUDE.local.md
 /output/
 /reservoir/
 
-# optimize/: scripts are tracked; generated ground truth / outputs and the
-# pre-2026 experiments (legacy/, incl. a 185 MB ground truth) are not.
+# optimize/: scripts are tracked. Generated ground truth and outputs are not:
+# dense in-polygon samples would effectively redistribute the CC BY-NC-ND
+# boundaries, and they are large and regenerable. legacy/ keeps only the 2025
+# scripts and their README, not their data.
 optimize/output/
-optimize/legacy/
+optimize/legacy/*
+!optimize/legacy/*.py
+!optimize/legacy/README.md
