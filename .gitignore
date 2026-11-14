@@ -29,6 +29,7 @@ CLAUDE.local.md
 /output/
 /reservoir/
 
-# Radius-optimization experiments and their ground-truth samples (~185 MB)
-optimize/
-generate_ground_truth_multi.py
+# optimize/: scripts are tracked; generated ground truth / outputs and the
+# pre-2026 experiments (legacy/, incl. a 185 MB ground truth) are not.
+optimize/output/
+optimize/legacy/

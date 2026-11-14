@@ -8,7 +8,7 @@ README.md (Korean) documents every script and output in detail.
 ## Checks
 
 ```bash
-pip install pandas shapely requests pytest ruff==0.15.9
+pip install pandas numpy shapely requests pytest ruff==0.15.9
 ruff check .
 pytest
 ```
@@ -47,6 +47,22 @@ python bjd_csv_to_dongnae.py -i results/<YYMMDD>/LSCT_LAWDCD_coords_<YYMMDD>_rev
 
 Shipping the CSV to `dongnae-kr` is done in the dongnae repo (see its
 CLAUDE.md).
+
+## Measuring accuracy (optimize/)
+
+Run from the repo root with `python -m` (needs `pip install "dongnae>=0.3.0"`):
+
+```bash
+python -m optimize.generate_ground_truth -i input -o optimize/output/ground_truth.csv
+python -m optimize.evaluate results/<old>/dongnaeKR_<old>.csv results/<new>/dongnaeKR_<new>.csv
+```
+
+- Evaluate every regenerated dataset against the previous one before
+  shipping it, and quote those numbers (README results section).
+- `optimize.optimize_radius` is experimental. Never ship its output without an
+  `evaluate` comparison showing it helps.
+- `optimize/output/` and `optimize/legacy/` (the 2025 scripts and their
+  outputs, including a ground truth with broken 8-digit ids) are gitignored.
 
 ## API verification
 

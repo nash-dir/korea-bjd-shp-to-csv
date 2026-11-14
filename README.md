@@ -283,13 +283,33 @@ python bjd_csv_to_dongnae.py -i results/261102/LSCT_LAWDCD_coords_261102_revised
 *   표본은 법정동마다 같은 개수의 점을 뽑은 것이라 면적·인구 가중치가 없습니다. dongnae README의 브이월드 API 기준 벤치마크와는 평가 방식이 달라 수치를 직접 비교할 수 없습니다.
 
 
+## 사. optimize — 정확도 평가와 반경 조정(실험)
+
+`optimize/`에는 dongnae 데이터의 정확도를 재고, 반경을 조정해 보는 스크립트가 있습니다. dongnae 엔진이 필요합니다(`pip install -e ".[optimize]"` 또는 `pip install "dongnae>=0.3.0" numpy`). 리포지토리 루트에서 `python -m`으로 실행합니다. 결과물은 `optimize/output/`(gitignore)에 저장됩니다.
+
+| 스크립트 | 하는 일 |
+| :--- | :--- |
+| `optimize.generate_ground_truth` | shp 폴리곤마다 내부 무작위 좌표를 뽑아 정답 라벨(10자리 법정동 코드)을 붙입니다. 떨어진 조각은 제외하고, 미터 좌표계에서 균일하게 뽑습니다. 법정동당 50개 기준 약 108만 개, 십여 초. |
+| `optimize.evaluate` | dongnae CSV 하나 이상의 Top-1(정답 코드 또는 상위 읍면동)·Top-3(정답 코드 포함) 정확도를 잽니다. 여러 CSV를 줄 때는 모든 CSV에 있는 코드의 지점만 써서 분모를 맞춥니다. |
+| `optimize.optimize_radius` | ground truth로 반경을 투표식으로 조정합니다(실험용). 결과는 반드시 `evaluate`로 원본과 비교하십시오. |
+
+```bash
+python -m optimize.generate_ground_truth -i input -o optimize/output/ground_truth.csv
+python -m optimize.evaluate results/261102/dongnaeKR_261102.csv
+python -m optimize.optimize_radius -d results/261102/dongnaeKR_261102.csv -o optimize/output/optimized.csv
+```
+
+* 2025년에 쓰던 이전 스크립트(`generate_ground_truth_multi.py`, `optimize_dnradius*.py`)와 그 산출물은 `optimize/legacy/`(gitignore)로 옮겼습니다. 이전 ground truth는 읍면동 코드를 8자리로 저장해 dongnae의 10자리 코드와 매칭되지 않았고, 그래서 읍면동 지점이 평가·최적화에서 빠졌습니다. CUDA 버전은 코드를 정수로 읽어 문자열 코드와 매칭되지 않았습니다. 이전 최적화 결과(`dongnaeKR_251130_optimized*.csv`)는 배포된 적이 없습니다.
+* 반경 조정의 한계: 상위 읍면동의 원은 하위 리 지점을 항상 포함하므로, 현재 투표 규칙에서는 침범(FP) 표가 대부분 상위 읍면동에 몰립니다. 계층 구조를 정리하기 전에는 큰 개선을 기대하기 어렵습니다.
+* 참고(2026. 11.): `261102` 데이터에 ground truth 10%로 3 epoch(기본 학습률) 돌린 결과, 같은 표본 기준 Top-1 69.37% → 69.38%, Top-3 74.83% → 74.87%로 사실상 변화가 없었습니다.
+
 ## 개발 / 테스트
 
-순수 함수(컬럼 매핑, 코드 패딩, 떨어진 조각 제거, 중심점, 주소 정제, 검증 라벨링, 수작업 보정 적용, dongnae 변환) 위주의 단위 테스트가 `tests/`에 있습니다.
+순수 함수(컬럼 매핑, 코드 패딩, 떨어진 조각 제거, 중심점, 주소 정제, 검증 라벨링, 수작업 보정 적용, dongnae 변환, ground truth 샘플링·채점·반경 갱신) 위주의 단위 테스트가 `tests/`에 있습니다.
 무거운 의존성(geopandas 등)은 실행 함수 내부에서 lazy import 되므로, 린트/테스트에는 `pandas`, `shapely`, `requests`만 있으면 됩니다.
 
 ```bash
-pip install pandas shapely requests pytest ruff==0.15.9
+pip install pandas numpy shapely requests pytest ruff==0.15.9
 ruff check .
 pytest
 ```
