@@ -1,11 +1,34 @@
+# OS
 .DS_Store
 Thumbs.db
-.venv/
-.env
+
+# Editors
+.vscode/
+.idea/
+
+# Python
 __pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets (VWorld API key for bjd_csv_API_verification.py)
+.env
+
+# Personal Claude Code instructions (CLAUDE.md is shared and committed)
+CLAUDE.local.md
+
+# Source shapefiles / master codes (VWorld, CC BY-NC-ND: not redistributed)
 /input/
+# Per-run outputs; published results are copied into results/<YYMMDD>/
 /output/
 /reservoir/
 
+# Radius-optimization experiments and their ground-truth samples (~185 MB)
 optimize/
 generate_ground_truth_multi.py
